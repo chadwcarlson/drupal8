@@ -20,16 +20,18 @@ runtime:
 # to the application in the PLATFORM_RELATIONSHIPS variable. The right-hand
 # side is in the form `<service name>:<endpoint name>`.
 relationships:
-    database: 'db:mysql'
-    redis: 'cache:redis'
+    rediscache: 'cache:redis'
+    first: 'db:first'
+    second: 'db:second'
 
 # The size of the persistent disk of the application (in MB).
 disk: 2048
 
 # The 'mounts' describe writable, persistent filesystem mounts in the application.
 mounts:
-    # The default Drupal files directory.
-    '/web/sites/default/files':
+    # For multisite, use a common shared files directory and subdirectories inside it
+    # to avoid needing a separate mount definition for each site.
+    '/web/files':
         source: local
         source_path: 'files'
     # Drupal gets its own dedicated tmp directory. The settings.platformsh.php
@@ -126,14 +128,14 @@ web:
             allow: true
             expires: 5m
             passthru: '/index.php'
-            root: 'web/sites/default/files'
+            root: 'web/files'
 
             # Do not execute PHP scripts from the writeable mount.
             scripts: false
 
             rules:
                 # Provide a longer TTL (2 weeks) for aggregated CSS and JS files.
-                '^/sites/default/files/(css|js)':
+                '^/files/(css|js)':
                     expires: 2w
 
 crons:
