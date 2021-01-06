@@ -6,20 +6,26 @@
 
 use Drupal\Core\Installer\InstallerKernel;
 
+if (!isset($platformsh_subsite_id)) {
+  $platformsh_subsite_id = 'database';
+}
+
 $platformsh = new \Platformsh\ConfigReader\Config();
 
 // Configure the database.
-if ($platformsh->hasRelationship('database')) {
-  $creds = $platformsh->credentials('database');
-  $databases['default']['default'] = [
-    'driver' => $creds['scheme'],
-    'database' => $creds['path'],
-    'username' => $creds['username'],
-    'password' => $creds['password'],
-    'host' => $creds['host'],
-    'port' => $creds['port'],
-    'pdo' => [PDO::MYSQL_ATTR_COMPRESS => !empty($creds['query']['compression'])]
-  ];
+if ($platformsh->hasRelationship($platformsh_subsite_id)) {
+  $creds = $platformsh->credentials($platformsh_subsite_id);
+  if ($creds) {
+    $databases['default']['default'] = [
+      'driver' => $creds['scheme'],
+      'database' => $creds['path'],
+      'username' => $creds['username'],
+      'password' => $creds['password'],
+      'host' => $creds['host'],
+      'port' => $creds['port'],
+      'pdo' => [PDO::MYSQL_ATTR_COMPRESS => !empty($creds['query']['compression'])]
+    ];
+  }
 }
 
 // Enable verbose error messages on development branches, but not on the production branch.
@@ -36,8 +42,11 @@ if (isset($platformsh->branch)) {
 }
 
 // Enable Redis caching.
-if ($platformsh->hasRelationship('redis') && !InstallerKernel::installationAttempted() && extension_loaded('redis') && class_exists('Drupal\redis\ClientFactory')) {
-  $redis = $platformsh->credentials('redis');
+if ($platformsh->hasRelationship('rediscache') && !InstallerKernel::installationAttempted() && extension_loaded('redis') && class_exists('Drupal\redis\ClientFactory')) {
+  $redis = $platformsh->credentials('rediscache');
+
+  // Set a cache prefix so not all sites go into the same cache pool.
+  $settings['cache_prefix'] = $platformsh_subsite_id . '_';
 
   // Set Redis as the default backend for any cache bin not otherwise specified.
   $settings['cache']['default'] = 'cache.backend.redis';
@@ -89,13 +98,16 @@ if ($platformsh->hasRelationship('redis') && !InstallerKernel::installationAttem
   ];
 }
 
+// Configure file paths.
 if ($platformsh->inRuntime()) {
-  // Configure private and temporary file paths.
+  if (!isset($settings['file_public_path'])) {
+    $settings['file_public_path'] = 'files/' . $platformsh_subsite_id;
+  }
   if (!isset($settings['file_private_path'])) {
-    $settings['file_private_path'] = $platformsh->appDir . '/private';
+    $settings['file_private_path'] = $platformsh->appDir . '/private/' . $platformsh_subsite_id;
   }
   if (!isset($settings['file_temp_path'])) {
-    $settings['file_temp_path'] = $platformsh->appDir . '/tmp';
+    $settings['file_temp_path'] = $platformsh->appDir . '/tmp/' . $platformsh_subsite_id;
   }
 
   // Configure the default PhpStorage and Twig template cache directories.
@@ -108,7 +120,7 @@ if ($platformsh->inRuntime()) {
 
   // Set the project-specific entropy value, used for generating one-time
   // keys and such.
-  $settings['hash_salt'] = $settings['hash_salt'] ?? $platformsh->projectEntropy;
+  $settings['hash_salt'] = $settings['hash_salt'] ?? $platformsh->projectEntropy . $platformsh_subsite_id;
 
   // Set the deployment identifier, which is used by some Drupal cache systems.
   $settings['deployment_identifier'] = $settings['deployment_identifier'] ?? $platformsh->treeId;
